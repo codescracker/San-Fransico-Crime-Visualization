@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crossfilter/1.3.12/crossfilter.min.js"></script>
+    <script src="category.js"></script>
+    <script src="time.js"></script>
+    <script src="map.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <meta charset="utf-8">
+    <title>HW5</title>
+
+    <style type="text/css">
+        #map {
+            background-image: url('SF_map.png');
+            background-size: 500px 500px;
+            background-repeat: no-repeat;
+            background-position: 16px 0px;
+        }
+
+        .line {
+            fill: none;
+            stroke: steelblue;
+            stroke-width: 2px;
+        }
+
+        .tooltip_SG {
+            position: absolute;
+            width: 250px;
+            height: 60px;
+            pointer-events: none;
+            background-color: #ffffff;
+        }
+
+        .tooltip_bar {
+            position: absolute;
+            width: 250px;
+            height: 60px;
+            pointer-events: none;
+        }
+
+        .tip_color {
+            width: 200px;
+            height: 15px;
+        }
+
+        div {
+            margin-top: 1px;
+        }
+    </style>
+
+
+</head>
+<body>
+<div class="container">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="row" id="bar"></div>
+            <div class="row" id="radar"></div>
+        </div>
+
+        <div class="col-md-6" id="map"></div>
+    </div>
+</div>
+
+<script>
+    margin = {top: 20, right: 20, bottom: 30, left: 40},
+            width = 500 - margin.left - margin.right,
+            height = 500 - margin.top - margin.bottom;
+    var radius = Math.min(width / 4, height / 4);
+    var arc = d3.arc()
+            .outerRadius(radius)
+            .innerRadius(radius - 20);
+    var arcOver = d3.arc()
+            .outerRadius(radius + 50)
+            .innerRadius(radius - 20);
+
+    var color = d3.scaleOrdinal()
+            .range(["#fff7ab", "#fa6e59", "#ed5752", "#426e86", "#2c4a52", "#1a7881", "#096790",
+                "#5294b1", "#f2d5cf", "#c7b4b4", "#ded4db", "#096790", "#118580", "#1a7881",
+                "#0a6890", "#9b9499", "#b4c7c7", "#c7b4b4", "#c72828", "#1ca154", "#187c66",
+                "#c89b9b", "#9bc8c8", "#cfecf2", "#fff8dc", "#223e93", "#2b99ff", "#feeb5d",
+                "#808080", "#f7cac9", "#ffc125", "#2e1629", "#162e1b", "#0a4016", "#400a34",
+                "#2005f1", "#f69615", "#e34a3e", "#304155"])
+            .domain(['ARSON', 'ASSAULT', 'BAD CHECKS', 'BRIBERY', 'BURGLARY', 'DISORDERLY CONDUCT',
+                'DRIVING UNDER THE INFLUENCE', 'DRUG/NARCOTIC', 'DRUNKENNESS', 'EMBEZZLEMENT', 'EXTORTION',
+                'FAMILY OFFENSES', 'FORGERY/COUNTERFEITING', 'FRAUD', 'GAMBLING', 'KIDNAPPING', 'LARCENY/THEFT',
+                'LIQUOR LAWS', 'LOITERING', 'MISSING PERSON', 'NON-CRIMINAL', 'OTHER OFFENSES', 'PORNOGRAPHY/OBSCENE MAT',
+                'PROSTITUTION', 'RECOVERED VEHICLE', 'ROBBERY', 'RUNAWAY', 'SECONDARY CODES', 'SEX OFFENSES, FORCIBLE',
+                'SEX OFFENSES, NON FORCIBLE', 'STOLEN PROPERTY', 'SUICIDE', 'SUSPICIOUS OCC', 'TREA', 'TRESPASS',
+                'VANDALISM', 'VEHICLE THEFT', 'WARRANTS', 'WEAPON LAWS']);
+
+    d3.csv('dt_2015_select.csv', function (error, d) {
+        d.forEach(function (d) {
+            d.X = +d.X;
+            d.Y = +d.Y;
+            d.int_time = +d.int_time;
+        });
+        cf = crossfilter(d);
+        drawMap(d);
+        cf.Category = cf.dimension(function (d) {
+            return d.Category
+        });
+        cf.time = cf.dimension(function (d) {
+            return d.int_time
+        });
+        category(cf.Category.group().top(Infinity));
+        time(cf.time.group().all().sort(function (a, b) {
+            return +a.key - +b.key;
+        }));
+
+    });
+
+
+    function notify(selector, eventName, target) {
+        if (eventName === 'Category') {
+            cf.Category.filter(target);
+            animateRadar(cf.time.group().all().sort(function (a, b) {
+                return +a.key - +b.key;
+            }));
+        }
+        if (eventName === 'Time') {
+            cf.time.filter(target);
+//      console.log(cf.time.filter(target).top(Infinity));
+            animateBar(cf.Category.group().top(Infinity));
+        }
+        if (eventName === "showBar") {
+            var classBase = selector.substring(3);
+            var className = ".bar" + classBase;
+            d3.select(className).attr("fill", "red");
+
+            d3.select("#category").selectAll("*:not"+"("+className+")")
+                    .style("opacity",0.2);
+        }
+
+        if (eventName === "hideBar") {
+            var classBase = selector.substring(3);
+            var className = ".bar" + classBase;
+            d3.select(className).attr("fill", color(target));
+
+            d3.select("#category").selectAll("*:not"+"("+className+")")
+                    .style("opacity",1.0);
+        }
+
+        if (eventName === "showDot") {
+            var classBase = selector.substring(3);
+            var className = ".dot" + classBase;
+            d3.selectAll(className)
+                    .attr("fill", "red")
+                    .attr("r", 2);
+
+            d3.select(".SF_Map").selectAll("*:not"+"("+className+")")
+                    .style("opacity",0.2);
+        }
+
+        if (eventName === "hideDot") {
+            var classBase = selector.substring(3);
+            var className = ".dot" + classBase;
+            d3.selectAll(className)
+                    .attr("fill", color(target))
+                    .attr("r", 1.5);
+
+            d3.select(".SF_Map").selectAll("*:not"+"("+className+")")
+                    .style("opacity",1.0);
+        }
+
+
+        if (eventName ==="showRadar"){
+            var classBase = selector;
+            var className = ".radar"+classBase;
+            d3.select(className)
+                    .transition().duration(100)
+                    .attr('d', arcOver)
+              //      .attr("fill","black");
+        }
+
+        if (eventName ==="hideRadar"){
+            var classBase = selector;
+            var className = ".radar"+classBase;
+            d3.select(className)
+                    .transition().duration(100)
+                    .attr('d', arc)
+               //     .attr("fill","CDCDCD");
+        }
+
+        if (eventName === "showTimeDot") {
+            var classBase = selector;
+            var className = ".dot" + classBase;
+//            console.log( d3.select(".SF_Map").selectAll("*:not"+"("+className+")"));
+            d3.select(".SF_Map").selectAll("*:not"+"("+className+")")
+                    .style("opacity", 0.2);
+        }
+
+        if (eventName === "hideTimeDot"){
+            var classBase = selector;
+            var className = ".dot" + classBase;
+            d3.select(".SF_Map").selectAll("*:not"+"("+className+")")
+                    .style("opacity", 1.0);
+        }
+    }
+
+    function wrap(text, width) {
+        text.each(function () {
+            var text = d3.select(this),
+                    words = text.text().split(/\s+/).reverse(),
+                    word,
+                    line = [],
+                    lineNumber = 0,
+                    lineHeight = 1.2, // ems
+                    y = text.attr("y"),
+                    x = text.attr("x"),
+                    dy = parseFloat(text.attr("dy")),
+                    tspan = text.text(null).append("tspan").attr("x", x).attr("y", y).attr("dy", dy + "em");
+
+            while (word = words.pop()) {
+                line.push(word);
+                tspan.text(line.join(" "));
+                if (tspan.node().getComputedTextLength() > width) {
+                    line.pop();
+                    tspan.text(line.join(" "));
+                    line = [word];
+                    tspan = text.append("tspan").attr("x", x).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "em").text(word);
+                }
+            }
+        });
+    }//wrap
+
+
+</script>
+</body>
+</html>
